@@ -11,6 +11,7 @@
     { key: "segment", label: "Segment" },
     { key: "entity", label: "الجهة" },
     { key: "project", label: "Project Name" },
+    { key: "projectManager", label: "مدير المشروع" },
     { key: "revenue", label: "الإيراد - المالية", money: true },
     { key: "totalPlan", label: "اجمالي الخطط للتسليم", money: true },
     { key: "plannedToNov", label: "التسليم المخطط حتى نوفمبر", money: true },
@@ -33,9 +34,18 @@
   function load() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (Array.isArray(saved)) return saved;
+      if (Array.isArray(saved)) return migrate(saved);
     } catch (e) { /* تجاهل */ }
     return JSON.parse(JSON.stringify(window.SEED_DATA || []));
+  }
+  // يضيف مدير المشروع للبيانات المحفوظة قبل إضافة هذا العمود
+  function migrate(list) {
+    const norm = (t) => String(t || "").trim().replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, " ");
+    const byName = new Map((window.SEED_DATA || []).map((r) => [norm(r.project), r.projectManager || ""]));
+    list.forEach((r) => {
+      if (r.projectManager === undefined) r.projectManager = byName.get(norm(r.project)) || "";
+    });
+    return list;
   }
   function save() {
     try {
@@ -95,17 +105,18 @@
   // ---------- الفلاتر ----------
   function filtered() {
     const q = $("#searchInput").value.trim().toLowerCase();
-    const fs = $("#fStatus").value, fg = $("#fSegment").value, fe = $("#fEntity").value, fd = $("#fDue").value;
+    const fs = $("#fStatus").value, fg = $("#fSegment").value, fe = $("#fEntity").value, fd = $("#fDue").value, fp = $("#fPM").value;
     let out = rows.filter((r) => {
       if (fs && r.status !== fs) return false;
       if (fg && r.segment !== fg) return false;
       if (fe && r.entity !== fe) return false;
+      if (fp && (fp === "__none__" ? r.projectManager : r.projectManager !== fp)) return false;
       if (fd) {
         const s = dueState(r);
         if (fd === "none" ? !(s === "none" || s === "invalid") : s !== fd) return false;
       }
       if (q) {
-        const hay = [r.project, r.owner, r.action, r.nextStep, r.segment, r.entity, r.status, r.planNote].join(" ").toLowerCase();
+        const hay = [r.project, r.projectManager, r.owner, r.action, r.nextStep, r.segment, r.entity, r.status, r.planNote].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -138,6 +149,10 @@
     fillSelect($("#fStatus"), uniq("status"), "حالة العقد: الكل");
     fillSelect($("#fSegment"), uniq("segment"), "Segment: الكل");
     fillSelect($("#fEntity"), uniq("entity"), "الجهة: الكل");
+    const pms = uniq("projectManager");
+    fillSelect($("#fPM"), pms, "مدير المشروع: الكل");
+    $("#fPM").insertAdjacentHTML("beforeend", `<option value="__none__">غير محدد</option>`);
+    $("#pmList").innerHTML = pms.map((v) => `<option value="${esc(v)}">`).join("");
     $("#segmentList").innerHTML = uniq("segment").map((v) => `<option value="${esc(v)}">`).join("");
     $("#entityList").innerHTML = uniq("entity").map((v) => `<option value="${esc(v)}">`).join("");
   }
@@ -222,6 +237,7 @@
         <td class="cell-lav"><span class="badge badge-seg">${esc(r.segment)}</span></td>
         <td class="cell-lav">${badgeEntity(r.entity)}</td>
         <td class="col-project cell-lav">${esc(r.project)}</td>
+        <td class="col-pm">${r.projectManager ? `<span class="pm"><span class="pm-avatar">${esc(r.projectManager.trim().charAt(0))}</span>${esc(r.projectManager)}</span>` : `<span class="badge badge-muted">غير محدد</span>`}</td>
         ${moneyCell(r.revenue, "revenue cell-tinted")}
         ${planCell}
         ${moneyCell(r.plannedToNov, ok ? "ok" : "")}
@@ -241,7 +257,7 @@
     $("#emptyState").hidden = data.length > 0;
 
     $("#gridFoot").innerHTML = data.length ? `<tr>
-      <td></td><td colspan="4">الإجمالي</td>
+      <td></td><td colspan="5">الإجمالي</td>
       ${["revenue", "totalPlan", "plannedToNov", "plannedDec", "delivered", "remaining"].map((k) => `<td class="money">${money(sum(data, k))}</td>`).join("")}
       <td colspan="5"></td></tr>` : "";
 
@@ -330,14 +346,14 @@
     });
     aoa.push(COLUMNS.map((c, i) => (i === 0 ? "الإجمالي" : c.money ? sum(data, c.key) : null)));
     const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
-    ws["!cols"] = [10, 12, 12, 45, 18, 18, 18, 18, 18, 18, 38, 35, 35, 14].map((w) => ({ wch: w }));
+    ws["!cols"] = [10, 12, 12, 45, 20, 18, 18, 18, 18, 18, 18, 38, 35, 35, 14].map((w) => ({ wch: w }));
     const range = XLSX.utils.decode_range(ws["!ref"]);
     for (let R = 1; R <= range.e.r; R++) {
-      for (let C = 4; C <= 9; C++) {
+      for (let C = 5; C <= 10; C++) {
         const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
         if (cell && cell.t === "n") cell.z = "#,##0.00";
       }
-      const dc = ws[XLSX.utils.encode_cell({ r: R, c: 13 })];
+      const dc = ws[XLSX.utils.encode_cell({ r: R, c: 14 })];
       if (dc && dc.t === "d") dc.z = "yyyy-mm-dd";
     }
     const wb = XLSX.utils.book_new();
@@ -365,7 +381,7 @@
           const project = String(get("project") || "").trim();
           if (!project) return; // يتجاوز صف الإجمالي والصفوف الفارغة
           const r = { id: out.length + 1 };
-          ["status", "segment", "entity", "action", "owner", "nextStep"].forEach((k) => { r[k] = String(get(k) == null ? "" : get(k)).trim(); });
+          ["status", "segment", "entity", "projectManager", "action", "owner", "nextStep"].forEach((k) => { r[k] = String(get(k) == null ? "" : get(k)).trim(); });
           r.project = project;
           MONEY_KEYS.forEach((k) => {
             const v = get(k);
@@ -418,10 +434,10 @@
   }
 
   // ---------- الأحداث ----------
-  ["#searchInput", "#fStatus", "#fSegment", "#fEntity", "#fDue"].forEach((s) =>
+  ["#searchInput", "#fStatus", "#fSegment", "#fEntity", "#fPM", "#fDue"].forEach((s) =>
     $(s).addEventListener("input", render));
   $("#clearFilters").addEventListener("click", () => {
-    ["#searchInput", "#fStatus", "#fSegment", "#fEntity", "#fDue"].forEach((s) => { $(s).value = ""; });
+    ["#searchInput", "#fStatus", "#fSegment", "#fEntity", "#fPM", "#fDue"].forEach((s) => { $(s).value = ""; });
     sort = { key: null, dir: 1 };
     render();
   });

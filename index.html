@@ -52,6 +52,7 @@
       <select id="fStatus"><option value="">حالة العقد: الكل</option></select>
       <select id="fSegment"><option value="">Segment: الكل</option></select>
       <select id="fEntity"><option value="">الجهة: الكل</option></select>
+      <select id="fPM"><option value="">مدير المشروع: الكل</option></select>
       <select id="fDue">
         <option value="">الاستحقاق: الكل</option>
         <option value="overdue">متأخر</option>
@@ -81,6 +82,7 @@
               <th data-sort="segment">Segment</th>
               <th data-sort="entity">الجهة</th>
               <th data-sort="project" class="col-project">Project Name</th>
+              <th data-sort="projectManager" class="col-pm">مدير المشروع</th>
               <th data-sort="revenue" class="money">الإيراد - المالية</th>
               <th data-sort="totalPlan" class="money">اجمالي الخطط للتسليم</th>
               <th data-sort="plannedToNov" class="money">التسليم المخطط حتى نوفمبر</th>
@@ -112,6 +114,7 @@
       <div class="dialog-body">
         <div class="form-grid">
           <label class="span-2">اسم المشروع (Project Name)<input name="project" required></label>
+          <label>مدير المشروع<input name="projectManager" list="pmList"></label>
           <label>حالة العقد
             <select name="status"><option value="">—</option><option>جديد</option><option>قائم</option></select>
           </label>
@@ -150,6 +153,7 @@
 
   <datalist id="segmentList"></datalist>
   <datalist id="entityList"></datalist>
+  <datalist id="pmList"></datalist>
 
   <div class="toast" id="toast" role="status"></div>
 
