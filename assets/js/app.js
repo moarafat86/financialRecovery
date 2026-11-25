@@ -526,56 +526,281 @@
     }).catch(() => {});
   }
 
+  // ألوان ملف Excel — نفس ألوان الجدول في النظام (بصيغة ARGB)
+  const XL = {
+    primary: "FF17355C", primary600: "FF1F4475", primary50: "FFEAEFF7", primary25: "FFF4F7FB",
+    lavender: "FFE9EBF5", accent: "FF215C98", white: "FFFFFFFF", zebra: "FFFAFBFD",
+    border: "FFDFE4EC", text: "FF1B2330", text2: "FF4B5668", muted: "FF7A8597",
+    success: "FF3F8F2E", successBg: "FFE6F4DC", warning: "FFA86A00", warningBg: "FFFFF3D6",
+    danger: "FFB3261E", dangerBg: "FFFCE8E6",
+    newBg: "FFE7F0FB", moeBg: "FFE8F1EC", moe: "FF1E6B45", nonMoeBg: "FFF1ECF7", nonMoe: "FF5B3D8A",
+  };
+  const XL_FONT = "Arial";
+  const XL_MONEY = '#,##0.00;(#,##0.00);"-"';
+  const fill = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+  const font = (o = {}) => Object.assign({ name: XL_FONT, size: 10, color: { argb: XL.text } }, o);
+  const thin = (argb = XL.border) => ({ style: "thin", color: { argb } });
+
+  function activeFiltersText() {
+    const parts = [];
+    const q = $("#searchInput").value.trim();
+    if (q) parts.push(`بحث: ${q}`);
+    [["#fStatus", "حالة العقد"], ["#fSegment", "Segment"], ["#fEntity", "الجهة"], ["#fPortfolio", "المحفظة"], ["#fPM", "مدير المشروع"], ["#fDue", "الاستحقاق"]].forEach(([sel, label]) => {
+      const el = $(sel);
+      if (el.value) parts.push(`${label}: ${el.options[el.selectedIndex].text}`);
+    });
+    if (sort.key) {
+      const name = sort.key === "id" ? "#" : COL[sort.key].label;
+      parts.push(`مرتب حسب ${name} ${sort.dir === 1 ? "تصاعدياً" : "تنازلياً"}`);
+    }
+    return parts.length ? parts.join("  •  ") : "بدون فلاتر";
+  }
+
+  async function buildStyledWorkbook(data) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "التعافي المالي";
+    wb.created = new Date();
+    const cols = [{ key: "_num", label: "#", width: 5 }, ...COLUMNS];
+    const N = cols.length;
+    const HEADER_ROW = 8;
+    const ws = wb.addWorksheet("خطة الايراد والتسليم", {
+      views: [{ rightToLeft: true, state: "frozen", ySplit: HEADER_ROW, showGridLines: false, zoomScale: 90 }],
+      pageSetup: { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
+      properties: { defaultRowHeight: 18 },
+    });
+    ws.pageSetup.printTitlesRow = `${HEADER_ROW}:${HEADER_ROW}`;
+    ws.columns = cols.map((c) => ({ width: c.width || 14 }));
+
+    // 1) العنوان
+    ws.mergeCells(1, 1, 1, N);
+    const title = ws.getCell(1, 1);
+    title.value = "التعافي المالي  |  خطة الإيراد والتسليم";
+    title.font = font({ size: 16, bold: true, color: { argb: XL.white } });
+    title.fill = fill(XL.primary);
+    title.alignment = { vertical: "middle", horizontal: "right", indent: 1 };
+    ws.getRow(1).height = 36;
+
+    // 2) سطر المعلومات
+    ws.mergeCells(2, 1, 2, N);
+    const info = ws.getCell(2, 1);
+    const now = new Date();
+    const stampTxt = now.toLocaleString("ar-SA-u-ca-gregory-nu-latn", { dateStyle: "medium", timeStyle: "short" });
+    info.value = `تاريخ التصدير: ${stampTxt}     عدد المشاريع: ${data.length} من ${rows.length}     ${activeFiltersText()}`;
+    info.font = font({ size: 10, color: { argb: XL.text2 } });
+    info.fill = fill(XL.primary25);
+    info.alignment = { vertical: "middle", horizontal: "right", indent: 1 };
+    info.border = { bottom: thin() };
+    ws.getRow(2).height = 22;
+    ws.getRow(3).height = 8;
+
+    // 3) بطاقات المؤشرات (صفوف 4–6)
+    const revenue = sum(data, "revenue"), plan = sum(data, "totalPlan"), toNov = sum(data, "plannedToNov");
+    const delivered = sum(data, "delivered"), rem = sum(data, "remaining");
+    const overdue = data.filter((r) => dueState(r) === "overdue").length;
+    const soon = data.filter((r) => dueState(r) === "soon").length;
+    const noContract = data.filter((r) => r.planNote).length;
+    const kpis = [
+      { label: "الإيراد - المالية", value: revenue, fmt: '#,##0 "ر.س"', sub: `${millions(revenue)} ريال`, color: XL.accent },
+      { label: "اجمالي الخطط للتسليم", value: plan, fmt: '#,##0 "ر.س"', sub: `${millions(plan)} ريال`, color: XL.primary },
+      { label: "المسلَّم", value: delivered, fmt: '#,##0 "ر.س"', sub: `${plan > 0 ? ((delivered / plan) * 100).toFixed(1) : "0.0"}% من إجمالي الخطط`, color: XL.success },
+      { label: "التسليم مقابل المخطط حتى نوفمبر", value: toNov > 0 ? delivered / toNov : 0, fmt: "0.0%", sub: `${millions(delivered)} من ${millions(toNov)}`, color: "FF2E7DB8" },
+      { label: "المتبقي", value: rem, fmt: '#,##0 "ر.س"', sub: `${millions(rem)} ريال`, color: XL.warning },
+      { label: "المشاريع", value: data.length, fmt: "0", sub: `${noContract} لم يصل العقد`, color: XL.primary600 },
+      { label: "الاستحقاقات المتأخرة", value: overdue, fmt: "0", sub: `${soon} تستحق خلال 7 أيام`, color: XL.danger },
+    ];
+    // توزيع الأعمدة على البطاقات بحسب العرض لتتقارب أحجامها
+    const widths = cols.map((c) => c.width || 14);
+    const totalW = widths.reduce((a, b) => a + b, 0);
+    let start = 1;
+    kpis.forEach((k, i) => {
+      let end = start, acc = widths[start - 1];
+      const target = (totalW / kpis.length) * (i + 1);
+      const before = widths.slice(0, start - 1).reduce((a, b) => a + b, 0);
+      while (end < N - (kpis.length - 1 - i) && before + acc + widths[end] / 2 < target) { acc += widths[end]; end++; }
+      if (i === kpis.length - 1) end = N;
+      [[4, k.label, font({ size: 9.5, color: { argb: XL.text2 } })],
+       [5, k.value, font({ size: 15, bold: true, color: { argb: XL.primary } })],
+       [6, k.sub, font({ size: 9, color: { argb: XL.muted } })]].forEach(([r, v, f]) => {
+        ws.mergeCells(r, start, r, end);
+        const c = ws.getCell(r, start);
+        c.value = v;
+        c.font = f;
+        c.alignment = { vertical: "middle", horizontal: "right", indent: 1 };
+        if (r === 5) c.numFmt = k.fmt;
+        for (let x = start; x <= end; x++) {
+          const cell = ws.getCell(r, x);
+          cell.fill = fill(XL.white);
+          cell.border = {
+            top: r === 4 ? { style: "thick", color: { argb: k.color } } : undefined,
+            bottom: r === 6 ? thin() : undefined,
+            left: x === end ? thin() : undefined,
+            right: x === start ? thin() : undefined,
+          };
+        }
+      });
+      start = end + 1;
+    });
+    ws.getRow(4).height = 20; ws.getRow(5).height = 26; ws.getRow(6).height = 18; ws.getRow(7).height = 10;
+
+    // 4) رأس الجدول
+    const head = ws.getRow(HEADER_ROW);
+    cols.forEach((c, i) => {
+      const cell = head.getCell(i + 1);
+      cell.value = c.label;
+      cell.font = font({ size: 10.5, bold: true, color: { argb: XL.white } });
+      cell.fill = fill(XL.primary);
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      cell.border = { left: thin("FF2B4A72"), right: thin("FF2B4A72"), bottom: { style: "medium", color: { argb: XL.primary } } };
+    });
+    head.height = 32;
+
+    // 5) الصفوف
+    const LAV = ["segment", "entity", "portfolio", "project"];
+    data.forEach((r, i) => {
+      const row = ws.getRow(HEADER_ROW + 1 + i);
+      const base = i % 2 ? XL.zebra : XL.white;
+      const ok = deliveredOk(r);
+      const ds = dueState(r);
+      cols.forEach((c, ci) => {
+        const cell = row.getCell(ci + 1);
+        let value = null;
+        let f = font();
+        let bg = base;
+        let align = { vertical: "top", horizontal: "right", wrapText: true };
+        if (LAV.includes(c.key)) bg = XL.lavender;
+        if (c.key === "_num") { value = i + 1; f = font({ size: 9, color: { argb: XL.muted } }); align = { vertical: "top", horizontal: "center" }; }
+        else if (c.money) {
+          value = c.key === "remaining" ? remaining(r) : r[c.key];
+          align = { vertical: "top", horizontal: "left" };
+          cell.numFmt = XL_MONEY;
+          if (c.key === "totalPlan" && !isNum(r.totalPlan) && r.planNote) {
+            value = r.planNote; bg = XL.warningBg; f = font({ bold: true, color: { argb: XL.warning } }); align = { vertical: "top", horizontal: "center" };
+          }
+          if (c.key === "revenue") { bg = XL.primary50; f = font({ bold: true, color: { argb: XL.accent } }); }
+          if ((c.key === "plannedToNov" || c.key === "delivered") && ok) { bg = XL.successBg; f = font({ bold: true, color: { argb: XL.success } }); }
+          if (isNum(value) && value === 0) f = font({ color: { argb: XL.muted } });
+          if (isNum(value) && value < 0) f = font({ color: { argb: XL.danger } });
+        } else if (c.key === "dueDate") {
+          align = { vertical: "top", horizontal: "center" };
+          if (r.dueDate) {
+            const [y, m, d] = r.dueDate.split("-").map(Number);
+            value = new Date(Date.UTC(y, m - 1, d));
+            cell.numFmt = "dd/mm/yyyy";
+          } else value = r.dueRaw || null;
+          if (ds === "overdue") { bg = XL.dangerBg; f = font({ bold: true, color: { argb: XL.danger } }); }
+          else if (ds === "soon") { bg = XL.warningBg; f = font({ bold: true, color: { argb: XL.warning } }); }
+          else if (ds === "invalid") f = font({ color: { argb: XL.danger }, italic: true });
+        } else {
+          value = r[c.key] || null;
+          switch (c.key) {
+            case "projectNo": f = font({ bold: true, color: { argb: XL.primary } }); align = { vertical: "top", horizontal: "center" }; break;
+            case "status":
+              align = { vertical: "top", horizontal: "center" };
+              if (value === "قائم") { bg = XL.primary; f = font({ bold: true, color: { argb: XL.white } }); }
+              else if (value) { bg = XL.newBg; f = font({ bold: true, color: { argb: XL.accent } }); }
+              else { value = "غير محدد"; bg = XL.primary50; f = font({ color: { argb: XL.muted } }); }
+              break;
+            case "segment": f = font({ bold: true, color: { argb: XL.primary } }); align = { vertical: "top", horizontal: "center" }; break;
+            case "entity":
+              align = { vertical: "top", horizontal: "center" };
+              if (value === "MOE") { bg = XL.moeBg; f = font({ bold: true, color: { argb: XL.moe } }); }
+              else if (value) { bg = XL.nonMoeBg; f = font({ bold: true, color: { argb: XL.nonMoe } }); }
+              break;
+            case "portfolio": f = font({ color: { argb: XL.text2 } }); if (!value) { value = "غير محدد"; f = font({ color: { argb: XL.muted } }); } break;
+            case "project": f = font({ bold: true, color: { argb: XL.accent } }); break;
+            case "projectManager": f = font({ bold: true, color: { argb: XL.primary } }); if (!value) { value = "غير محدد"; f = font({ color: { argb: XL.muted } }); } break;
+            default: f = font({ color: { argb: XL.text2 } });
+          }
+        }
+        cell.value = value;
+        cell.font = f;
+        cell.fill = fill(bg);
+        cell.alignment = Object.assign({ indent: align.horizontal === "center" ? 0 : 1 }, align);
+        cell.border = { bottom: thin(), left: thin("FFEEF1F5"), right: thin("FFEEF1F5") };
+      });
+      // Excel لا يضبط ارتفاع الصفوف ذات النص الطويل تلقائياً، فنقدّره من طول النص وعرض العمود
+      let lines = 1;
+      cols.forEach((c, ci) => {
+        if (c.money || c.key === "_num" || c.key === "dueDate") return;
+        const text = String(row.getCell(ci + 1).value || "");
+        if (!text) return;
+        const perLine = Math.max(4, (c.width || 14) * 1.35 - 2);
+        const l = text.split("\n").reduce((acc, part) => acc + Math.max(1, Math.ceil(part.length / perLine)), 0);
+        lines = Math.max(lines, l);
+      });
+      row.height = Math.max(22, lines * 14 + 8);
+    });
+
+    // 6) سطر الإجمالي
+    const totalRowNo = HEADER_ROW + data.length + 1;
+    const totalRow = ws.getRow(totalRowNo);
+    const firstMoney = cols.findIndex((c) => c.money);
+    ws.mergeCells(totalRowNo, 1, totalRowNo, firstMoney);
+    cols.forEach((c, ci) => {
+      const cell = totalRow.getCell(ci + 1);
+      if (ci === 0) cell.value = "الإجمالي";
+      else if (c.money) { cell.value = sum(data, c.key); cell.numFmt = XL_MONEY; }
+      cell.font = font({ size: 11, bold: true, color: { argb: XL.primary } });
+      cell.fill = fill(XL.primary50);
+      cell.alignment = { vertical: "middle", horizontal: c.money ? "left" : "right", indent: c.money ? 0 : 1 };
+      cell.border = { top: { style: "medium", color: { argb: XL.primary } }, bottom: { style: "medium", color: { argb: XL.primary } } };
+    });
+    totalRow.height = 26;
+
+    // 7) دليل الألوان
+    const legendRowNo = totalRowNo + 2;
+    const legend = [
+      ["تم تسليم المخطط", XL.successBg, XL.success],
+      ["متأخر", XL.dangerBg, XL.danger],
+      ["يستحق خلال 7 أيام", XL.warningBg, XL.warning],
+      ["لم يصل العقد", XL.warningBg, XL.warning],
+    ];
+    const lc = ws.getCell(legendRowNo, 2);
+    lc.value = "دليل الألوان:";
+    lc.font = font({ bold: true, color: { argb: XL.text2 } });
+    legend.forEach(([label, bg, fg], i) => {
+      const cell = ws.getCell(legendRowNo, 3 + i);
+      cell.value = label;
+      cell.font = font({ size: 9, bold: true, color: { argb: fg } });
+      cell.fill = fill(bg);
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = { top: thin(fg), bottom: thin(fg), left: thin(fg), right: thin(fg) };
+    });
+
+    ws.autoFilter = { from: { row: HEADER_ROW, column: 1 }, to: { row: Math.max(HEADER_ROW, totalRowNo - 1), column: N } };
+    return wb;
+  }
+
   async function exportExcel() {
     if (activeEdit) commitEdit();
-    if (!window.XLSX) return toast("مكتبة Excel لم تُحمَّل بعد، حاول مرة أخرى");
+    if (!window.ExcelJS) return toast("مكتبة Excel لم تُحمَّل بعد، حاول مرة أخرى");
     const data = filtered();
-    const aoa = [COLUMNS.map((c) => c.label)];
-    data.forEach((r) => {
-      aoa.push(COLUMNS.map((c) => {
-        if (c.key === "remaining") return remaining(r);
-        if (c.key === "totalPlan") return isNum(r.totalPlan) ? r.totalPlan : (r.planNote || null);
-        if (c.key === "dueDate") return r.dueDate ? new Date(r.dueDate + "T00:00:00") : (r.dueRaw || null);
-        return r[c.key] == null || r[c.key] === "" ? null : r[c.key];
-      }));
-    });
-    aoa.push(COLUMNS.map((c, i) => (i === 0 ? "الإجمالي" : c.money ? sum(data, c.key) : null)));
-    const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
-    ws["!cols"] = COLUMNS.map((c) => ({ wch: c.width || 14 }));
-    const range = XLSX.utils.decode_range(ws["!ref"]);
-    const dateCol = COLUMNS.findIndex((c) => c.key === "dueDate");
-    for (let R = 1; R <= range.e.r; R++) {
-      COLUMNS.forEach((c, C) => {
-        if (!c.money) return;
-        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
-        if (cell && cell.t === "n") cell.z = "#,##0.00";
-      });
-      const dc = ws[XLSX.utils.encode_cell({ r: R, c: dateCol })];
-      if (dc && dc.t === "d") dc.z = "yyyy-mm-dd";
-    }
-    const wb = XLSX.utils.book_new();
-    wb.Workbook = { Views: [{ RTL: true }] };
-    XLSX.utils.book_append_sheet(wb, ws, "خطة الايراد والتسليم");
-    const stamp = new Date().toISOString().slice(0, 10);
-    const filename = `التعافي_المالي_${stamp}.xlsx`;
-    const label = data.length === rows.length ? `${data.length} مشروع` : `${data.length} مشروع (حسب الفلاتر)`;
-    if (!inViewer) {
-      XLSX.writeFile(wb, filename);
-      return toast(`تم تصدير ${label}`);
-    }
-    if (!downloadsApi) return toast("التصدير غير متاح في هذا العرض");
-    const bytes = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const btn = $("#exportBtn");
     btn.disabled = true;
     try {
-      await downloadsApi.save({ filename, data: new Blob([bytes]) });
+      const wb = await buildStyledWorkbook(data);
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const stamp = new Date().toISOString().slice(0, 10);
+      const filename = `التعافي_المالي_${stamp}.xlsx`;
+      const label = data.length === rows.length ? `${data.length} مشروع` : `${data.length} مشروع (حسب الفلاتر)`;
+      if (!inViewer) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        return toast(`تم تصدير ${label}`);
+      }
+      if (!downloadsApi) return toast("التصدير غير متاح في هذا العرض");
+      await downloadsApi.save({ filename, data: blob });
       toast(`تم تصدير ${label}`);
     } catch (err) {
       const code = err && err.code;
       if (code === "declined") toast("تم إلغاء التصدير");
       else if (code === "rate_limited") toast("هناك نافذة حفظ مفتوحة بالفعل، حاول بعد قليل");
       else if (code === "host_unavailable") toast("هذا التطبيق لا يدعم حفظ الملفات، افتح الصفحة من المتصفح");
-      else toast("تعذر التصدير في هذا العرض");
+      else { console.error(err); toast("تعذر التصدير"); }
     } finally {
       btn.disabled = false;
     }
@@ -589,12 +814,15 @@
         const wb = XLSX.read(e.target.result, { type: "array", cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
-        const header = (aoa[0] || []).map((h) => String(h || "").trim());
+        // صف العناوين قد لا يكون الأول (الملف المصدَّر من النظام يبدأ بعنوان ومؤشرات)
+        let headerAt = aoa.slice(0, 30).findIndex((line) => (line || []).some((h) => String(h || "").trim() === "Project Name"));
+        if (headerAt < 0) headerAt = 0;
+        const header = (aoa[headerAt] || []).map((h) => String(h || "").trim());
         const idx = {};
         COLUMNS.forEach((c) => { idx[c.key] = header.indexOf(c.label); });
         if (idx.project < 0) throw new Error("لم يتم العثور على عمود Project Name");
         const out = [];
-        aoa.slice(1).forEach((line) => {
+        aoa.slice(headerAt + 1).forEach((line) => {
           const get = (k) => (idx[k] >= 0 ? line[idx[k]] : null);
           const project = String(get("project") || "").trim();
           if (!project) return; // يتجاوز صف الإجمالي والصفوف الفارغة

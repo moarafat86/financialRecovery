@@ -20,7 +20,8 @@ index.html
 assets/css/styles.css     # الهوية اللونية في :root
 assets/js/app.js          # منطق النظام
 assets/js/seed-data.js    # البيانات الأولية المستخرجة من ملف Excel
-assets/vendor/xlsx.full.min.js  # SheetJS 0.18.5 لقراءة ملفات Excel وكتابتها
+assets/vendor/xlsx.full.min.js  # SheetJS 0.18.5 لقراءة ملفات Excel (الاستيراد)
+assets/vendor/exceljs.min.js    # ExcelJS 4.4.0 لتصدير ملف Excel منسق بألوان النظام
 ```
 
 > البيانات تُحفظ حالياً في متصفح المستخدم (localStorage).
