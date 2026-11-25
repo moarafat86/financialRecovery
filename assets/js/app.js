@@ -332,8 +332,19 @@
   dlg.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => dlg.close()));
 
   // ---------- Excel ----------
-  function exportExcel() {
-    if (!window.XLSX) return toast("مكتبة Excel غير متاحة");
+  // داخل عارض claude.ai يتم الحفظ عبر خاصية التنزيلات، وخارجه عبر المتصفح مباشرة
+  const inViewer = !!(window.claude && typeof window.claude.use === "function");
+  let downloadsApi = null;
+  if (inViewer) {
+    $("#exportBtn").hidden = true;
+    window.claude.use("downloads").then((d) => {
+      downloadsApi = d;
+      $("#exportBtn").hidden = !d;
+    }).catch(() => {});
+  }
+
+  async function exportExcel() {
+    if (!window.XLSX) return toast("مكتبة Excel لم تُحمَّل بعد، حاول مرة أخرى");
     const data = filtered();
     const aoa = [COLUMNS.map((c) => c.label)];
     data.forEach((r) => {
@@ -360,7 +371,28 @@
     wb.Workbook = { Views: [{ RTL: true }] };
     XLSX.utils.book_append_sheet(wb, ws, "خطة الايراد والتسليم");
     const stamp = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `التعافي_المالي_${stamp}.xlsx`);
+    const filename = `التعافي_المالي_${stamp}.xlsx`;
+    const label = data.length === rows.length ? `${data.length} مشروع` : `${data.length} مشروع (حسب الفلاتر)`;
+    if (!inViewer) {
+      XLSX.writeFile(wb, filename);
+      return toast(`تم تصدير ${label}`);
+    }
+    if (!downloadsApi) return toast("التصدير غير متاح في هذا العرض");
+    const bytes = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const btn = $("#exportBtn");
+    btn.disabled = true;
+    try {
+      await downloadsApi.save({ filename, data: new Blob([bytes]) });
+      toast(`تم تصدير ${label}`);
+    } catch (err) {
+      const code = err && err.code;
+      if (code === "declined") toast("تم إلغاء التصدير");
+      else if (code === "rate_limited") toast("هناك نافذة حفظ مفتوحة بالفعل، حاول بعد قليل");
+      else if (code === "host_unavailable") toast("هذا التطبيق لا يدعم حفظ الملفات، افتح الصفحة من المتصفح");
+      else toast("تعذر التصدير في هذا العرض");
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function importExcel(file) {
@@ -458,7 +490,7 @@
     if (tr) openEditor(Number(tr.dataset.id));
   });
   $("#addBtn").addEventListener("click", () => openEditor(null));
-  if ($("#exportBtn")) $("#exportBtn").addEventListener("click", exportExcel);
+  $("#exportBtn").addEventListener("click", exportExcel);
   $("#importFile").addEventListener("change", (e) => {
     if (e.target.files[0]) importExcel(e.target.files[0]);
     e.target.value = "";

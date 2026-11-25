@@ -151,7 +151,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: inline-block; margin-inline-start: 6px; padding: 1px 9px; border-radius: 99px;
   background: var(--primary-50); color: var(--primary); font-size: 12px; font-weight: 600;
 }
-.legend { display: flex; gap: 14px; color: var(--text-2); font-size: 12px; flex-wrap: wrap; }
+.btn-excel { background: #1D6F42; color: #fff; }
+.btn-excel:hover { background: #185C37; }
+.btn-excel:focus-visible { outline: 3px solid rgba(29,111,66,.35); outline-offset: 2px; }
+.btn-excel[disabled] { opacity: .6; cursor: wait; }
+.legend { margin-inline-start: auto; display: flex; gap: 14px; color: var(--text-2); font-size: 12px; flex-wrap: wrap; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .dot-success { background: var(--success-bg); border: 1px solid var(--success); }
