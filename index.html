@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>التعافي المالي | خطة الإيراد والتسليم</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <!-- الشريط العلوي -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 17l5-5 4 4 8-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 8h5v5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <h1>التعافي المالي</h1>
+        <p>خطة الإيراد والتسليم</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span class="last-update" id="lastUpdate"></span>
+      <label class="btn btn-ghost" title="استيراد ملف Excel">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        استيراد
+        <input type="file" id="importFile" accept=".xlsx,.xls" hidden>
+      </label>
+      <button class="btn btn-ghost" id="exportBtn" title="تصدير إلى Excel">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 17v3h16v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        تصدير
+      </button>
+      <button class="btn btn-primary" id="addBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        مشروع جديد
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- مؤشرات الأداء -->
+    <section class="kpis" id="kpis"></section>
+
+    <!-- الفلاتر -->
+    <section class="card toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="search" id="searchInput" placeholder="ابحث باسم المشروع، المسؤول، الإجراء...">
+      </div>
+      <select id="fStatus"><option value="">حالة العقد: الكل</option></select>
+      <select id="fSegment"><option value="">Segment: الكل</option></select>
+      <select id="fEntity"><option value="">الجهة: الكل</option></select>
+      <select id="fDue">
+        <option value="">الاستحقاق: الكل</option>
+        <option value="overdue">متأخر</option>
+        <option value="soon">خلال 7 أيام</option>
+        <option value="later">لاحقاً</option>
+        <option value="none">بدون تاريخ</option>
+      </select>
+      <button class="btn btn-link" id="clearFilters">مسح الفلاتر</button>
+    </section>
+
+    <!-- الجدول -->
+    <section class="card table-card">
+      <div class="table-head">
+        <h2>خطة الإيراد والتسليم <span class="count" id="rowCount"></span></h2>
+        <div class="legend">
+          <span><i class="dot dot-success"></i> تم تسليم المخطط</span>
+          <span><i class="dot dot-danger"></i> متأخر</span>
+          <span><i class="dot dot-warning"></i> يستحق خلال 7 أيام</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="grid">
+          <thead>
+            <tr>
+              <th data-sort="id" class="col-num">#</th>
+              <th data-sort="status">حالة العقد</th>
+              <th data-sort="segment">Segment</th>
+              <th data-sort="entity">الجهة</th>
+              <th data-sort="project" class="col-project">Project Name</th>
+              <th data-sort="revenue" class="money">الإيراد - المالية</th>
+              <th data-sort="totalPlan" class="money">اجمالي الخطط للتسليم</th>
+              <th data-sort="plannedToNov" class="money">التسليم المخطط حتى نوفمبر</th>
+              <th data-sort="plannedDec" class="money">التسليم المخطط ديسمبر</th>
+              <th data-sort="delivered" class="money">مسلم</th>
+              <th data-sort="remaining" class="money">المتبقي</th>
+              <th data-sort="action" class="col-text">الإجراء المطلوب</th>
+              <th data-sort="owner" class="col-text">المسؤول</th>
+              <th data-sort="nextStep" class="col-text">الخطوة القادمة</th>
+              <th data-sort="dueDate">تاريخ الاستحقاق</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="gridBody"></tbody>
+          <tfoot id="gridFoot"></tfoot>
+        </table>
+        <div class="empty" id="emptyState" hidden>لا توجد مشاريع مطابقة للفلاتر الحالية</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- نافذة الإضافة / التعديل -->
+  <dialog id="editDialog" class="dialog">
+    <form method="dialog" id="editForm">
+      <header class="dialog-head">
+        <h3 id="dialogTitle">مشروع جديد</h3>
+        <button type="button" class="icon-btn" data-close aria-label="إغلاق">✕</button>
+      </header>
+      <div class="dialog-body">
+        <div class="form-grid">
+          <label class="span-2">اسم المشروع (Project Name)<input name="project" required></label>
+          <label>حالة العقد
+            <select name="status"><option value="">—</option><option>جديد</option><option>قائم</option></select>
+          </label>
+          <label>Segment<input name="segment" list="segmentList"></label>
+          <label>الجهة<input name="entity" list="entityList"></label>
+          <label>تاريخ الاستحقاق<input name="dueDate" type="date"></label>
+          <label>الإيراد - المالية<input name="revenue" type="number" step="0.01"></label>
+          <label>اجمالي الخطط للتسليم<input name="totalPlan" type="number" step="0.01"></label>
+          <label>ملاحظة على الخطة (مثال: لم يصل العقد)<input name="planNote"></label>
+          <label>التسليم المخطط حتى نوفمبر<input name="plannedToNov" type="number" step="0.01"></label>
+          <label>التسليم المخطط ديسمبر<input name="plannedDec" type="number" step="0.01"></label>
+          <label>مسلم<input name="delivered" type="number" step="0.01"></label>
+          <label class="span-2">الإجراء المطلوب<textarea name="action" rows="2"></textarea></label>
+          <label class="span-2">المسؤول<textarea name="owner" rows="2"></textarea></label>
+          <label class="span-2">الخطوة القادمة<textarea name="nextStep" rows="2"></textarea></label>
+        </div>
+        <p class="hint">المتبقي يُحسب تلقائياً = اجمالي الخطط للتسليم − مسلم</p>
+      </div>
+      <footer class="dialog-foot">
+        <button type="button" class="btn btn-danger-ghost" id="deleteBtn">حذف المشروع</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>إلغاء</button>
+        <button type="submit" class="btn btn-primary" value="save">حفظ</button>
+      </footer>
+    </form>
+  </dialog>
+  <datalist id="segmentList"></datalist>
+  <datalist id="entityList"></datalist>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="assets/vendor/xlsx.full.min.js"></script>
+  <script src="assets/js/seed-data.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
