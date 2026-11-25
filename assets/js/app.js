@@ -305,9 +305,9 @@
     toast(editingId != null ? "تم حفظ التعديلات" : "تمت إضافة المشروع");
   });
 
-  $("#deleteBtn").addEventListener("click", () => {
+  $("#deleteBtn").addEventListener("click", async () => {
     const r = rows.find((x) => x.id === editingId);
-    if (!r || !confirm(`حذف المشروع "${r.project}"؟`)) return;
+    if (!r || !(await askConfirm(`حذف المشروع "${r.project}"؟`, "حذف"))) return;
     rows = rows.filter((x) => x.id !== editingId);
     save(); refreshFilterOptions(); render();
     dlg.close();
@@ -350,7 +350,7 @@
   function importExcel(file) {
     if (!window.XLSX) return toast("مكتبة Excel غير متاحة");
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const wb = XLSX.read(e.target.result, { type: "array", cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
@@ -381,7 +381,7 @@
           out.push(r);
         });
         if (!out.length) throw new Error("الملف لا يحتوي على مشاريع");
-        if (!confirm(`سيتم استبدال البيانات الحالية بـ ${out.length} مشروع من الملف. متابعة؟`)) return;
+        if (!(await askConfirm(`سيتم استبدال البيانات الحالية بـ ${out.length} مشروع من الملف. متابعة؟`, "استيراد"))) return;
         rows = out;
         save(); refreshFilterOptions(); render();
         toast(`تم استيراد ${out.length} مشروع`);
@@ -390,6 +390,21 @@
       }
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  // ---------- نافذة التأكيد ----------
+  function askConfirm(message, okLabel) {
+    const d = $("#confirmDialog");
+    $("#confirmMsg").textContent = message;
+    $("#confirmYes").textContent = okLabel || "تأكيد";
+    return new Promise((resolve) => {
+      const done = (v) => { d.removeEventListener("close", onClose); if (d.open) d.close(); resolve(v); };
+      const onClose = () => done(false);
+      $("#confirmYes").onclick = () => done(true);
+      $("#confirmNo").onclick = () => done(false);
+      d.addEventListener("close", onClose);
+      d.showModal();
+    });
   }
 
   // ---------- تنبيه ----------
@@ -427,7 +442,7 @@
     if (tr) openEditor(Number(tr.dataset.id));
   });
   $("#addBtn").addEventListener("click", () => openEditor(null));
-  $("#exportBtn").addEventListener("click", exportExcel);
+  if ($("#exportBtn")) $("#exportBtn").addEventListener("click", exportExcel);
   $("#importFile").addEventListener("change", (e) => {
     if (e.target.files[0]) importExcel(e.target.files[0]);
     e.target.value = "";

@@ -46,7 +46,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------- الشريط العلوي ---------- */
 .topbar {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 14px 28px;
   background: linear-gradient(90deg, var(--primary-700), var(--primary) 60%, var(--primary-600));
@@ -252,6 +252,8 @@ td.due-soon { box-shadow: inset 3px 0 0 var(--warning); }
 .hint { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
 .dialog-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--primary-25); }
 .spacer { flex: 1; }
+.dialog-sm { width: min(440px, calc(100vw - 32px)); }
+.confirm-msg { margin: 6px 0; font-size: 15px; font-weight: 500; color: var(--text); }
 
 /* ---------- التنبيه ---------- */
 .toast {
